@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -6,7 +7,12 @@ import requests
 
 PAGE_ID = os.environ["FB_PAGE_ID"]
 PAGE_TOKEN = os.environ["FB_PAGE_ACCESS_TOKEN"]
+IG_USER_ID = os.environ["IG_USER_ID"]
 GRAPH_VERSION = "v26.0"
+RAW_IMAGE_BASE = (
+    "https://raw.githubusercontent.com/heavenwireless/"
+    "twin-wireless-social-publisher/main/images"
+)
 
 CONTENT = {
     0: (
@@ -51,11 +57,7 @@ CONTENT = {
 }
 
 
-def main():
-    weekday = datetime.now(ZoneInfo("America/Chicago")).weekday()
-    filename, caption = CONTENT[weekday]
-    image_path = os.path.join(os.path.dirname(__file__), "images", filename)
-
+def post_to_facebook(image_path, caption):
     with open(image_path, "rb") as f:
         resp = requests.post(
             f"https://graph.facebook.com/{GRAPH_VERSION}/{PAGE_ID}/photos",
@@ -64,7 +66,54 @@ def main():
             timeout=60,
         )
     resp.raise_for_status()
-    print(f"Posted successfully: {resp.json()}")
+    print(f"Facebook: posted successfully: {resp.json()}")
+
+
+def post_to_instagram(filename, caption):
+    image_url = f"{RAW_IMAGE_BASE}/{filename}"
+
+    container_resp = requests.post(
+        f"https://graph.facebook.com/{GRAPH_VERSION}/{IG_USER_ID}/media",
+        data={
+            "image_url": image_url,
+            "caption": caption,
+            "access_token": PAGE_TOKEN,
+        },
+        timeout=60,
+    )
+    container_resp.raise_for_status()
+    creation_id = container_resp.json()["id"]
+
+    for _ in range(10):
+        status_resp = requests.get(
+            f"https://graph.facebook.com/{GRAPH_VERSION}/{creation_id}",
+            params={"fields": "status_code", "access_token": PAGE_TOKEN},
+            timeout=30,
+        )
+        status_resp.raise_for_status()
+        status_code = status_resp.json().get("status_code")
+        if status_code == "FINISHED":
+            break
+        if status_code == "ERROR":
+            raise RuntimeError(f"Instagram container failed: {status_resp.json()}")
+        time.sleep(3)
+
+    publish_resp = requests.post(
+        f"https://graph.facebook.com/{GRAPH_VERSION}/{IG_USER_ID}/media_publish",
+        data={"creation_id": creation_id, "access_token": PAGE_TOKEN},
+        timeout=60,
+    )
+    publish_resp.raise_for_status()
+    print(f"Instagram: posted successfully: {publish_resp.json()}")
+
+
+def main():
+    weekday = datetime.now(ZoneInfo("America/Chicago")).weekday()
+    filename, caption = CONTENT[weekday]
+    image_path = os.path.join(os.path.dirname(__file__), "images", filename)
+
+    post_to_facebook(image_path, caption)
+    post_to_instagram(filename, caption)
 
 
 if __name__ == "__main__":
