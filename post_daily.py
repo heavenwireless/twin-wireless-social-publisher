@@ -15,44 +15,59 @@ RAW_IMAGE_BASE = (
 )
 
 CONTENT = {
+    # Rewritten 2026-09-07 at Murad's direction: "no educational posts",
+    # "something closer to AdCentral posts". House style follows AdCentral, the
+    # paid service posting to the same Page - emoji-forward, expertise-first,
+    # short, always a reason to come in, no how-to.
+    #
+    # The Monday caption previously read "We repair it same day". That is a
+    # turnaround promise, which the knowledge base forbids outright, and it had
+    # been publishing weekly. Removed. Nothing here promises a timeframe.
+    #
+    # Image filenames are unchanged, so each caption still matches its picture.
+    # NOTE: there is no smartwatch slot because there is no smartwatch image -
+    # adding one needs a new PNG in images/, not just a caption.
     0: (
         "mon-cracked-screen-price.png",
-        "Cracked iPhone screen? We repair it same day at Twin Wireless -- see today's "
-        "price on the board, call for other models. 2328 Line Ave, Shreveport. "
-        "(318) 670-3938",
+        "📱✨ Cracked screen? We replace them every day, and we'll tell you "
+        "exactly what yours needs before anything is done. Stop by 2328 Line Ave, "
+        "Shreveport. 🛠️ (318) 670-3938",
     ),
     1: (
         "tue-android-repair.png",
-        "Android repair, done right. Screens, batteries, charging ports & more -- free "
-        "diagnosis, real price on the spot. Samsung, Google, Motorola and other major "
-        "Android brands. (318) 670-3938",
+        "🤖🛠️ Screens, batteries, charging ports - we have the "
+        "expertise to diagnose and repair your Android device. Samsung, Google, "
+        "Motorola and more. Free diagnosis. 💬 (318) 670-3938",
     ),
     2: (
         "wed-computer-laptop.png",
-        "Laptop acting up? We repair computers too -- screens, batteries, hinges, slow "
-        "performance and more. Bring it by Line Ave for a free diagnosis. "
-        "(318) 670-3938",
+        "🔝🖥️ Every computer is different, so we take the time to "
+        "evaluate each one properly rather than guessing. Bring yours to Line Ave "
+        "for a free diagnosis. 🌟 (318) 670-3938",
     ),
     3: (
         "thu-game-console.png",
-        "Console repair, handled right. PlayStation, Xbox and Switch repair -- call for "
-        "a price. (318) 670-3938",
+        "⚡️🎮 Console acting up? Bring it to us and get back in the "
+        "game. PlayStation, Xbox and Switch. 👨‍🔧 "
+        "(318) 670-3938",
     ),
     4: (
         "fri-back-glass.png",
-        "Cracked back glass? We fix that too. iPhone back glass from $100, confirmed "
-        "after inspection. (318) 670-3938",
+        "💎🔧 Shattered back glass doesn't mean a new phone. We handle "
+        "it - bring it in and we'll confirm the exact price after inspection. "
+        "💬 2328 Line Ave, Shreveport. (318) 670-3938",
     ),
     5: (
         "sat-prepaid-activation.png",
-        "New phone? Activated today. Simple Mobile, AT&T Prepaid, Cricket and Verizon "
-        "Prepaid -- about 15 minutes with the phone in hand. Open 9AM-8PM, 2328 Line "
-        "Ave, Shreveport.",
+        "📲✅ New phone? We'll get you activated. Simple Mobile, AT&T "
+        "Prepaid, Cricket and Verizon Prepaid - bring the phone with you. Open "
+        "9AM-8PM. 💬 2328 Line Ave, Shreveport.",
     ),
     6: (
         "sun-tablet-accessories.png",
-        "Tablet repair, done right. iPad and tablet repair, plus screen protectors and "
-        "cases. Open 11AM-5PM today. 2328 Line Ave, Shreveport.",
+        "💻✅ From hardware to software, we handle tablet repair - iPad and "
+        "Android alike. Screen protectors and cases too. Open 11AM-5PM today. "
+        "🛡️ 2328 Line Ave, Shreveport.",
     ),
 }
 
