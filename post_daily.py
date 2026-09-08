@@ -16,9 +16,8 @@ RAW_IMAGE_BASE = (
 
 CONTENT = {
     # Rewritten 2026-09-07 at Murad's direction: "no educational posts",
-    # "something closer to AdCentral posts". House style follows AdCentral, the
-    # paid service posting to the same Page - emoji-forward, expertise-first,
-    # short, always a reason to come in, no how-to.
+    # and a promotional voice rather than teaching - emoji-forward,
+    # expertise-first, short, always a reason to come in, no how-to.
     #
     # The Monday caption previously read "We repair it same day". That is a
     # turnaround promise, which the knowledge base forbids outright, and it had
@@ -122,10 +121,63 @@ def post_to_instagram(filename, caption):
     print(f"Instagram: posted successfully: {publish_resp.json()}")
 
 
+def lint_caption(caption):
+    """Brand guard, added 2026-09-08 at Murad's direction ("can we add the
+    brand check to it and keep it going"). Mirrors the rules the TwinSocial
+    publisher enforces in brand.mjs -- this script previously ran no checks at
+    all, which is how a banned same-day promise got published weekly for a
+    month. Returns a list of problems; empty means clean.
+
+    The captions here are static, so in practice this trips only when someone
+    edits CONTENT above and reintroduces a banned claim. That is exactly the
+    moment it needs to trip.
+    """
+    import re
+
+    problems = []
+    lower = caption.lower()
+
+    # Turnaround must never be an unconditional promise. "Most repairs same
+    # day" is the one approved hedge.
+    if re.search(r"same[- ]day", lower) and not re.search(
+        r"\b(most|many|majority|usually|often|typically|generally)\b[^.]{0,40}same[- ]day"
+        r"|same[- ]day\b[^.]{0,40}\b(for|on|in) most\b",
+        lower,
+    ):
+        problems.append("unhedged same-day promise")
+
+    for banned in (
+        "match or beat",       # price-match claim, banned outright
+        "cheapest guaranteed",
+        "best in louisiana",
+        "we repair everything",
+        "paypal",              # bill pay settles via Cash App/Zelle only
+        "authorized apple", "apple authorized", "apple certified",
+        "genuine apple", "apple partner",
+        "twin iptv",
+    ):
+        if banned in lower:
+            problems.append(f"banned claim: {banned!r}")
+
+    # Any dollar figure must be one of the published prices.
+    for price in re.findall(r"\$(\d+(?:\.\d{2})?)", caption):
+        if price not in {"29.99", "40", "50", "60", "80", "100", "150"}:
+            problems.append(f"price ${price} is not on the published list")
+
+    return problems
+
+
 def main():
     weekday = datetime.now(ZoneInfo("America/Chicago")).weekday()
     filename, caption = CONTENT[weekday]
     image_path = os.path.join(os.path.dirname(__file__), "images", filename)
+
+    problems = lint_caption(caption)
+    if problems:
+        # Fail closed: better a missed day than a banned claim published.
+        raise SystemExit(
+            f"BRAND CHECK FAILED for weekday {weekday} -- not posting: {problems}"
+        )
 
     post_to_facebook(image_path, caption)
     post_to_instagram(filename, caption)
