@@ -1,0 +1,34 @@
+# Twin Wireless social publisher — .gitignore
+#
+# Added 2026-09-14. THIS REPO IS PUBLIC and had no .gitignore at all, so nothing
+# mechanically prevented a live credential from being committed. Nothing
+# sensitive was ever tracked (all commits were checked), but the natural act of
+# dropping a .env beside post_daily.py to run it locally, then `git add -A`,
+# would have published Facebook Page and Instagram tokens to the open internet.
+
+# --- credentials: never, under any name -------------------------------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*token*.json
+*secret*
+credentials*
+service-account*.json
+
+# --- customer data / PII ----------------------------------------------------
+*.csv
+exports/
+*customer*
+*twilio*
+
+# --- runtime noise ----------------------------------------------------------
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
