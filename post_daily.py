@@ -1,6 +1,6 @@
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import requests
@@ -172,6 +172,10 @@ APPROVAL_API = "https://www.twin-wireless.com/api/content-approvals.php"
 # calendar day: approving Tuesday's creative once keeps Tuesday running until
 # its caption or image changes.
 ROTATION_KEY = "0000-00-00"
+# How long one approval of a weekly-repeating creative stays valid.
+# Four weeks: long enough that re-approving is not a chore, short enough
+# that nobody is repeating content they last looked at in another season.
+APPROVAL_MAX_AGE_DAYS = 28
 
 
 def rotation_fingerprint(image_path: str, caption: str) -> str:
@@ -222,7 +226,33 @@ def owner_approved(item_id: str, fingerprint: str) -> tuple[bool, str]:
         return False, "not approved by owner"
     if rec.get("fingerprint") != fingerprint:
         return False, "content changed since it was approved"
-    return True, f"approved by {rec.get('approvedBy')} at {rec.get('approvedAt')}"
+
+    # APPROVALS EXPIRE. Murad, 2026-09-15: "No approval may silently become
+    # indefinite permission to repeat content."
+    #
+    # This cron republishes the SAME seven creatives every week, forever. A
+    # single tap approving Tuesday would otherwise authorise every future
+    # Tuesday for the life of the service -- which is not a considered decision,
+    # it is one decision quietly reapplied a hundred times. After the window the
+    # item falls back to held and has to be looked at again.
+    stamp = rec.get("approvedAt")
+    if not stamp:
+        return False, "approval record carries no timestamp"
+    try:
+        approved_at = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except ValueError:
+        return False, f"approval timestamp unreadable ({stamp})"
+    age_days = (datetime.now(timezone.utc) - approved_at).days
+    if age_days > APPROVAL_MAX_AGE_DAYS:
+        return False, (
+            f"approval is {age_days} days old (limit {APPROVAL_MAX_AGE_DAYS}); "
+            "re-approve to keep this weekday running"
+        )
+
+    return True, (
+        f"approved by {rec.get('approvedBy')} at {rec.get('approvedAt')} "
+        f"({age_days}d old, expires after {APPROVAL_MAX_AGE_DAYS}d)"
+    )
 
 
 def main():
