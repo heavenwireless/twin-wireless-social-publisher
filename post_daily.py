@@ -167,6 +167,64 @@ def lint_caption(caption):
     return problems
 
 
+APPROVAL_API = "https://www.twin-wireless.com/api/content-approvals.php"
+# Weekly rotation, so approvals are keyed to a fixed pseudo-date rather than a
+# calendar day: approving Tuesday's creative once keeps Tuesday running until
+# its caption or image changes.
+ROTATION_KEY = "0000-00-00"
+
+
+def rotation_fingerprint(image_path: str, caption: str) -> str:
+    """Same shape as the JS publisher's: image BYTES plus the exact caption.
+
+    Hashing the bytes, not the filename, is what makes "material changes
+    invalidate approval" true here -- swapping the PNG behind an unchanged
+    filename produces a different fingerprint and the day falls back to held.
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(image_path, "rb") as fh:
+        h.update(hashlib.sha256(fh.read()).hexdigest().encode())
+    h.update(b"caption:")
+    h.update(caption.encode("utf-8"))
+    return h.hexdigest()[:24]
+
+
+def owner_approved(item_id: str, fingerprint: str) -> tuple[bool, str]:
+    """Owner approval check. FAILS CLOSED on every uncertainty.
+
+    Added 2026-09-15. Until then this cron published to Facebook and Instagram
+    every day with no approval gate at all -- only the brand lint. Murad's
+    standing requirement is that he approves content before it publishes, and
+    "verify EVERY publisher consumes owner approval": a gate in the JavaScript
+    publisher says nothing about this one, which is a separate service on a
+    separate schedule reaching the same two public accounts.
+    """
+    secret = os.environ.get("CONTENT_APPROVAL_SECRET", "").strip()
+    if not secret:
+        return False, "CONTENT_APPROVAL_SECRET is not set"
+    try:
+        resp = requests.get(
+            APPROVAL_API,
+            params={"date": ROTATION_KEY},
+            headers={"X-Approval-Secret": secret},
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            return False, f"approval API HTTP {resp.status_code}"
+        store = resp.json().get("approvals") or {}
+    except Exception as exc:  # network, DNS, TLS, bad JSON -- all fail closed
+        return False, f"approval API unreachable: {exc}"
+
+    rec = store.get(item_id) if isinstance(store, dict) else None
+    if not isinstance(rec, dict) or rec.get("approved") is not True:
+        return False, "not approved by owner"
+    if rec.get("fingerprint") != fingerprint:
+        return False, "content changed since it was approved"
+    return True, f"approved by {rec.get('approvedBy')} at {rec.get('approvedAt')}"
+
+
 def main():
     weekday = datetime.now(ZoneInfo("America/Chicago")).weekday()
     filename, caption = CONTENT[weekday]
@@ -178,6 +236,17 @@ def main():
         raise SystemExit(
             f"BRAND CHECK FAILED for weekday {weekday} -- not posting: {problems}"
         )
+
+    item_id = f"rotation-{weekday}"
+    fingerprint = rotation_fingerprint(image_path, caption)
+    ok, why = owner_approved(item_id, fingerprint)
+    print(f"Approval check: {item_id} fp={fingerprint} -> {'RELEASE' if ok else 'HELD'} ({why})")
+    if not ok:
+        # Exit 0, not a failure: being held is the correct, expected outcome
+        # for unapproved content, and a red cron run every day would train
+        # everyone to ignore this job's status.
+        print("HELD -- nothing posted. Approve this creative to release it.")
+        return
 
     post_to_facebook(image_path, caption)
     post_to_instagram(filename, caption)
