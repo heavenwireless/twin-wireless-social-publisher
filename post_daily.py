@@ -178,6 +178,79 @@ ROTATION_KEY = "0000-00-00"
 APPROVAL_MAX_AGE_DAYS = 28
 
 
+ACTIVE_SCHEDULE_API = "https://www.twin-wireless.com/api/active-schedule.json"
+# This service's name in that file. Must match the key used in
+# twin-social/output/active-schedule.json.
+MY_SCHEDULE_NAME = "render-rotation"
+# A published switch nobody has refreshed in five weeks is not evidence about
+# today. Generous, because re-publishing it is a manual step; bounded, because
+# the failure it guards against is a stale "you may publish".
+ACTIVE_SCHEDULE_MAX_AGE_DAYS = 35
+
+
+def owns_the_schedule() -> tuple[bool, str]:
+    """Is this cron the publisher currently allowed to post? FAILS CLOSED.
+
+    Three generators write to the same Facebook and Instagram accounts: the
+    daily engine and the weekly plan (both on the shop machine) and this cron.
+    twin-social/output/active-schedule.json names exactly one of them, and
+    publish.mjs has honoured it since 2026-09-15.
+
+    This service did not. `grep -c active-schedule post_daily.py` returned 0 --
+    the switch simply never reached across the two Render accounts. What held
+    this cron was owner approval alone, which is a different gate answering a
+    different question: approval says "this creative is fine to post", the
+    switch says "you are the one who may post today". Approving a single
+    rotation creative would have satisfied the first and left the second
+    unasked, and this job would have started posting at 10:00 on top of the
+    daily engine's own slots.
+
+    Both gates now have to pass, and this one is checked FIRST: not owning the
+    schedule is a reason to post nothing at all, so there is no point asking
+    about the approval of a specific creative.
+
+    Fails closed on every uncertainty -- unreachable, unparseable, missing
+    field, stale. A publisher that cannot confirm it owns the schedule must not
+    publish, for the same reason publish.mjs refuses when it cannot read the
+    file.
+    """
+    try:
+        resp = requests.get(ACTIVE_SCHEDULE_API, timeout=15)
+        if resp.status_code != 200:
+            return False, f"active-schedule API HTTP {resp.status_code}"
+        doc = resp.json()
+    except Exception as exc:
+        return False, f"active-schedule API unreachable: {exc}"
+
+    if not isinstance(doc, dict):
+        return False, "active-schedule response is not an object"
+
+    active = doc.get("activeSource")
+    if not active:
+        return False, "active-schedule response names no activeSource"
+
+    generated = doc.get("generatedAt")
+    if not generated:
+        return False, "active-schedule response carries no generatedAt"
+    try:
+        stamp = datetime.fromisoformat(str(generated).replace("Z", "+00:00"))
+    except ValueError:
+        return False, f"active-schedule generatedAt unreadable ({generated})"
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    age_days = (datetime.now(timezone.utc) - stamp).days
+    if age_days > ACTIVE_SCHEDULE_MAX_AGE_DAYS:
+        return False, (
+            f"active-schedule copy is {age_days} days old "
+            f"(limit {ACTIVE_SCHEDULE_MAX_AGE_DAYS}); re-publish it with "
+            "twin-social/sync-active-schedule.mjs --upload"
+        )
+
+    if active != MY_SCHEDULE_NAME:
+        return False, f'"{active}" owns the schedule, not "{MY_SCHEDULE_NAME}"'
+    return True, f"{MY_SCHEDULE_NAME} is the active schedule"
+
+
 def rotation_fingerprint(image_path: str, caption: str) -> str:
     """Same shape as the JS publisher's: image BYTES plus the exact caption.
 
@@ -266,6 +339,16 @@ def main():
         raise SystemExit(
             f"BRAND CHECK FAILED for weekday {weekday} -- not posting: {problems}"
         )
+
+    # Schedule ownership first. "Am I allowed to publish at all today?" comes
+    # before "is this particular creative approved?" -- and checking it first
+    # also means a held day prints the real reason instead of an approval
+    # message that makes the rotation look merely unapproved.
+    owns, owns_why = owns_the_schedule()
+    print(f"Schedule check: {MY_SCHEDULE_NAME} -> {'OWNS' if owns else 'HELD'} ({owns_why})")
+    if not owns:
+        print("HELD -- another generator owns the shared accounts. Nothing posted.")
+        return
 
     item_id = f"rotation-{weekday}"
     fingerprint = rotation_fingerprint(image_path, caption)
